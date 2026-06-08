@@ -1110,10 +1110,10 @@ body.density-ultra .card{padding:calc((13px - var(--compact)*3px)*.66)}
         <select id="defaultView" onchange="setDefaultView(this.value)"><option value="dashboard">Dashboard</option><option value="tasks">To Do</option><option value="focus">Focus</option><option value="calendar">Calendar</option><option value="finance">Finance</option></select><br><br>
         <label class="small"><input type="checkbox" id="introToggle" onchange="setIntroReplay(this.checked)" style="width:auto"> Always show intro on launch</label><br>
         <label class="small"><input type="checkbox" id="autoBackupHint" onchange="setBackupHint(this.checked)" style="width:auto"> Remind me to export backups</label><br><br>
-        <p class="small">Lew's Tracker uses browser cache for speed. Select a storage folder to keep the main data and attachments outside browser storage.</p>
+        <p class="small">Lew's Tracker uses browser cache for speed. Select a storage folder to keep data and attachments outside browser storage.</p>
         <div class="card" style="border-style:dashed;border-color:color-mix(in srgb,var(--accent) 35%,transparent);margin:10px 0;background:color-mix(in srgb,var(--accent) 6%,transparent)">
           <h3 style="margin-bottom:8px">Folder Storage</h3>
-          <p class="small" style="margin-top:0">Choose a folder on this device. Tracker data will be saved to that folder as a JSON file. Attachments will be stored as separate files in a tracker-files folder, while browser storage keeps only a lightweight cache.</p>
+          <p class="small" style="margin-top:0">Choose a folder on this device. The tracker will create top-level folders by tab name. To Do List gets one folder per task using the task name, with attachments and task-details.txt inside each task folder. Notes, Templates, Calendar, Finance, Focus, Insights, Dashboard, and Settings also get their own tab folders.</p>
           <div class="panel-actions" style="margin-bottom:8px;padding-bottom:0">
             <button class="btn primary" onclick="chooseSaveFolder()">📁 Select Storage Folder</button>
             <button class="btn" onclick="saveToSelectedFolder(true)">💾 Save Now</button>
@@ -1359,47 +1359,128 @@ function uid(){return Date.now()+Math.floor(Math.random()*1e6)}
 function moneyFmt(n,curr){const sym=CURRENCIES[curr]||curr+' ';return sym+Number(n||0).toLocaleString(undefined,{maximumFractionDigits:0})}
 function ensure(t){t.files=t.files||[];t.tags=t.tags||[];t.refs=t.refs||'';t.status=t.status||'todo';if(t.status==='new')t.status='todo';if(t.status==='inprogress')t.status='progress';t.priority=t.priority||'medium';t.checklist=t.checklist||[];t.source=t.source||'task';t.createdAt=t.createdAt||Date.now();t.timeLog=t.timeLog||[];t.recurring=t.recurring||'none';return t}
 
-// ── Folder-primary storage and external attachments ──────────────────────────
-// Browser storage is only a lightweight cache. The selected folder stores the main JSON file and large attachments.
+// ── Folder-primary storage: one folder per task + external attachments ───────
+// Browser storage is only a lightweight cache. The selected folder stores:
+// - lews-tracker-data.json
+// - tasks/<task name>/task-details.txt
+// - tasks/<task name>/<attached files>
 let trackerDirHandle = null;
 let trackerFolderSaveTimer = null;
-let trackerFolderReady = false;
 const TRACKER_FOLDER_DB = 'lews_tracker_folder_db';
 const TRACKER_FOLDER_STORE = 'handles';
 const TRACKER_FOLDER_KEY = 'tracker-folder';
 const TRACKER_FOLDER_FILENAME = 'lews-tracker-data.json';
-const TRACKER_ATTACH_DIR = 'tracker-files';
+const TAB_FOLDERS={dashboard:'Dashboard',tasks:'To Do List',templates:'Templates',insights:'Insights',calendar:'Calendar',notes:'Notes',finance:'Finance',focus:'Focus',settings:'Settings'};
+const TRACKER_TASKS_DIR = TAB_FOLDERS.tasks;
+const TASK_DETAILS_FILENAME = 'task-details.txt';
 
 function setFolderSaveStatus(msg){const el=document.getElementById('folderSaveStatus');if(el)el.textContent=msg;}
 function supportsFolderSave(){return 'showDirectoryPicker' in window && 'indexedDB' in window;}
-function safeFileName(name){return String(name||'file').replace(/[\\/:*?"<>|]+/g,'_').replace(/\s+/g,'_').slice(0,120);}
+function safeFileName(name){return String(name||'Untitled Task').replace(/[\\/:*?"<>|]+/g,'_').replace(/\s+/g,' ').trim().slice(0,120)||'Untitled Task';}
 function dataUrlToBlob(dataUrl){const parts=String(dataUrl||'').split(',');const meta=parts[0]||'';const b64=parts[1]||'';const type=(meta.match(/data:([^;]+)/)||[])[1]||'application/octet-stream';const bin=atob(b64);const arr=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);return new Blob([arr],{type});}
 function openFolderDb(){return new Promise((resolve,reject)=>{const req=indexedDB.open(TRACKER_FOLDER_DB,1);req.onupgradeneeded=()=>{const db=req.result;if(!db.objectStoreNames.contains(TRACKER_FOLDER_STORE))db.createObjectStore(TRACKER_FOLDER_STORE);};req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error);});}
 async function saveFolderHandle(handle){const db=await openFolderDb();return new Promise((resolve,reject)=>{const tx=db.transaction(TRACKER_FOLDER_STORE,'readwrite');tx.objectStore(TRACKER_FOLDER_STORE).put(handle,TRACKER_FOLDER_KEY);tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error);});}
 async function getSavedFolderHandle(){const db=await openFolderDb();return new Promise((resolve,reject)=>{const tx=db.transaction(TRACKER_FOLDER_STORE,'readonly');const req=tx.objectStore(TRACKER_FOLDER_STORE).get(TRACKER_FOLDER_KEY);req.onsuccess=()=>resolve(req.result||null);req.onerror=()=>reject(req.error);});}
 async function verifyFolderPermission(handle,requestWrite){if(!handle)return false;const opts={mode:'readwrite'};if((await handle.queryPermission(opts))==='granted')return true;if(requestWrite&&(await handle.requestPermission(opts))==='granted')return true;return false;}
-function lightweightDataCopy(src){const copy=structuredClone(src||{});(copy.tasks||[]).forEach(t=>(t.files||[]).forEach(f=>{if(f.folderFileName||f.external)delete f.data;}));return copy;}
-function fullDataCopyForFolder(src){const copy=structuredClone(src||{});(copy.tasks||[]).forEach(t=>(t.files||[]).forEach(f=>{if(f.folderFileName||f.external)delete f.data;}));return copy;}
-function trackerBackupPayload(){return{app:"Lew's Tracker",format:'folder-primary-storage',version:'v8.8-folder-primary',savedAt:new Date().toISOString(),user:typeof currentUser!=='undefined'&&currentUser?currentUser:'local',data:fullDataCopyForFolder(data)};}
-async function getAttachmentDir(create){if(!trackerDirHandle)return null;return await trackerDirHandle.getDirectoryHandle(TRACKER_ATTACH_DIR,{create:!!create});}
-async function persistBlobToFolder(blob,name,type,size){if(!trackerDirHandle)return null;const ok=await verifyFolderPermission(trackerDirHandle,true);if(!ok)return null;const dir=await getAttachmentDir(true);const fileName=Date.now()+'-'+Math.floor(Math.random()*1e6)+'-'+safeFileName(name);const fh=await dir.getFileHandle(fileName,{create:true});const writable=await fh.createWritable();await writable.write(blob);await writable.close();return{folderFileName:fileName,external:true,type:type||blob.type||'application/octet-stream',size:size||blob.size||0};}
-async function persistFileToFolder(file){const meta=await persistBlobToFolder(file,file.name,file.type,file.size);if(!meta)return null;return{id:uid(),name:file.name,type:meta.type,size:meta.size,added:new Date().toISOString(),folderFileName:meta.folderFileName,external:true};}
-async function migrateEmbeddedFilesToFolder(){if(!trackerDirHandle||!data)return 0;let count=0;for(const t of data.tasks||[]){for(const f of t.files||[]){if(f.data&&!f.folderFileName){const blob=dataUrlToBlob(f.data);const meta=await persistBlobToFolder(blob,f.name,f.type,f.size);if(meta){f.folderFileName=meta.folderFileName;f.external=true;f.type=f.type||meta.type;f.size=f.size||meta.size;delete f.data;count++;}}}}return count;}
-async function chooseSaveFolder(){if(!supportsFolderSave()){alert('Folder storage is not supported in this browser. Please use Chrome or Edge on your HTTPS/GitHub Pages site.');setFolderSaveStatus('Folder storage unavailable in this browser');return;}try{trackerDirHandle=await window.showDirectoryPicker({mode:'readwrite'});const ok=await verifyFolderPermission(trackerDirHandle,true);if(!ok){setFolderSaveStatus('Folder permission denied');return;}trackerFolderReady=true;await saveFolderHandle(trackerDirHandle);setFolderSaveStatus('Folder selected ✓');let loaded=false;try{const fh=await trackerDirHandle.getFileHandle(TRACKER_FOLDER_FILENAME,{create:false});if(fh&&confirm('A tracker data file already exists in this folder. Load it now?'))loaded=await loadFromSelectedFolder(false);}catch(_){ }if(!loaded){const migrated=await migrateEmbeddedFilesToFolder();await saveToSelectedFolder(true);if(migrated)toastMsg('Moved '+migrated+' attachment(s) to folder ✓');}}catch(err){if(err&&err.name==='AbortError')return;console.error('Folder selection failed:',err);setFolderSaveStatus('Folder selection failed');alert('Folder selection failed. Check the browser console for details.');}}
-async function restoreSaveFolder(){if(!supportsFolderSave()){setFolderSaveStatus('Folder storage unavailable in this browser');return;}try{const handle=await getSavedFolderHandle();if(!handle){setFolderSaveStatus('No folder selected — using browser cache only');return;}trackerDirHandle=handle;const ok=await verifyFolderPermission(trackerDirHandle,false);trackerFolderReady=ok;setFolderSaveStatus(ok?'Folder ready ✓':'Folder permission needed — click Save Now or Select Storage Folder');}catch(err){console.warn('Could not restore folder access:',err);setFolderSaveStatus('No folder selected — using browser cache only');}}
-async function saveToSelectedFolder(manual){if(!trackerDirHandle){if(manual)alert('Please select a storage folder first.');setFolderSaveStatus('No folder selected — using browser cache only');return false;}try{const ok=await verifyFolderPermission(trackerDirHandle,!!manual);if(!ok){setFolderSaveStatus('Folder permission needed — click Save Now');if(manual)alert('Permission is required before saving to the selected folder.');return false;}trackerFolderReady=true;await migrateEmbeddedFilesToFolder();const fileHandle=await trackerDirHandle.getFileHandle(TRACKER_FOLDER_FILENAME,{create:true});const writable=await fileHandle.createWritable();await writable.write(JSON.stringify(trackerBackupPayload(),null,2));await writable.close();if(STORE&&data)localStorage.setItem(STORE,JSON.stringify(lightweightDataCopy(data)));const stamp=new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit'});setFolderSaveStatus('Folder-primary save ✓ '+stamp+' — '+TRACKER_FOLDER_FILENAME);if(manual)toastMsg('Saved to selected folder ✓');return true;}catch(err){console.error('Folder save failed:',err);setFolderSaveStatus('Folder save failed');if(manual)alert('Folder save failed. Check the browser console for details.');return false;}}
+function lightweightDataCopy(src){const copy=structuredClone(src||{});(copy.tasks||[]).forEach(t=>(t.files||[]).forEach(f=>{if(f.external||f.folderFileName)delete f.data;}));return copy;}
+function fullDataCopyForFolder(src){const copy=structuredClone(src||{});(copy.tasks||[]).forEach(t=>(t.files||[]).forEach(f=>{if(f.external||f.folderFileName)delete f.data;}));return copy;}
+function taskFolderName(t){return safeFileName((t&&t.title)||'Untitled Task');}
+async function getTasksRoot(create){if(!trackerDirHandle)return null;return await trackerDirHandle.getDirectoryHandle(TRACKER_TASKS_DIR,{create:!!create});}
+async function getTaskFolder(t,create){const root=await getTasksRoot(create);if(!root)return null;const name=taskFolderName(t);return await root.getDirectoryHandle(name,{create:!!create});}
+function taskDetailsText(t){t=ensure(t);const files=(t.files||[]).map(f=>'- '+(f.name||f.folderFileName||'file')+(f.size?' ('+bytesFmt(f.size)+')':'')).join('\n')||'- No files';const checks=(t.checklist||[]).map(c=>(c.done?'[x] ':'[ ] ')+c.text).join('\n')||'- No checklist';return [
+"Lew's Tracker - Task Details",
+'Generated: '+new Date().toLocaleString(),
+'',
+'Tab Folder: '+TAB_FOLDERS.tasks,
+'Task Folder: '+taskFolderName(t),
+'Title: '+(t.title||''),
+'Status: '+statusName(t.status),
+'Priority: '+(t.priority||''),
+'Due: '+(t.due||''),
+'Recurring: '+(t.recurring||'none'),
+'Tags: '+((t.tags||[]).join(', ')||'-'),
+'Time Logged: '+fmtSecs(totalSecs(t)),
+'',
+'Description / Details / References:',
+(t.refs||'-'),
+'',
+'Checklist:',
+checks,
+'',
+'Files:',
+files,
+''
+].join('\n');}
+async function writeTaskDetailsFile(t){if(!trackerDirHandle||!t)return;const folder=await getTaskFolder(t,true);const fh=await folder.getFileHandle(TASK_DETAILS_FILENAME,{create:true});const writable=await fh.createWritable();await writable.write(taskDetailsText(t));await writable.close();t.taskFolder=taskFolderName(t);}
+async function writeAllTaskDetails(){if(!trackerDirHandle||!data)return;for(const t of data.tasks||[])await writeTaskDetailsFile(t);}
+async function getTabFolder(tabKey,create){if(!trackerDirHandle)return null;const folderName=TAB_FOLDERS[tabKey]||safeFileName(tabKey);return await trackerDirHandle.getDirectoryHandle(folderName,{create:!!create});}
+async function writeTextFile(folder,fileName,content){if(!folder)return;const fh=await folder.getFileHandle(safeFileName(fileName),{create:true});const writable=await fh.createWritable();await writable.write(String(content||''));await writable.close();}
+async function writeJsonFile(folder,fileName,obj){await writeTextFile(folder,fileName,JSON.stringify(obj,null,2));}
+function dashboardSummaryText(){const tasks=(data.tasks||[]).map(ensure);const open=tasks.filter(t=>t.status!=='done').length;const done=tasks.filter(t=>t.status==='done').length;const overdue=tasks.filter(t=>t.status!=='done'&&t.due&&t.due<today()).length;const todayCnt=tasks.filter(t=>t.status!=='done'&&t.due===today()).length;return ["Lew's Tracker - Dashboard Summary",'Generated: '+new Date().toLocaleString(),'','Open To Do: '+open,'Done: '+done,'Overdue: '+overdue,'Today: '+todayCnt,'Notes: '+(data.notes||[]).length,'Budgets: '+(data.budgets||[]).length].join('\n');}
+function insightsSummaryText(){const tasks=(data.tasks||[]).map(ensure);const open=tasks.filter(t=>t.status!=='done').length;const high=tasks.filter(t=>t.status!=='done'&&t.priority==='high').length;const overdue=tasks.filter(t=>t.status!=='done'&&t.due&&t.due<today()).length;const totalTime=tasks.reduce((a,t)=>a+totalSecs(t),0);return ["Lew's Tracker - Insights",'Generated: '+new Date().toLocaleString(),'','Open items: '+open,'High priority open: '+high,'Overdue: '+overdue,'Total logged time: '+fmtSecs(totalTime),'','Top open tasks:',...(tasks.filter(t=>t.status!=='done').slice(0,15).map(t=>'- '+t.title+' | '+t.priority+' | '+(t.due||'No due date')))].join('\n');}
+function calendarSummaryText(){const tasks=(data.tasks||[]).map(ensure).filter(t=>t.due).sort((a,b)=>(a.due||'').localeCompare(b.due||''));return ["Lew's Tracker - Calendar",'Generated: '+new Date().toLocaleString(),'',...tasks.map(t=>'- '+t.due+' | '+statusName(t.status)+' | '+t.title)].join('\n');}
+function focusSummaryText(){const tasks=(data.tasks||[]).map(ensure);const logged=tasks.filter(t=>totalSecs(t)>0).sort((a,b)=>totalSecs(b)-totalSecs(a));return ["Lew's Tracker - Focus",'Generated: '+new Date().toLocaleString(),'','Default focus minutes: '+((data.settings&&data.settings.focusDefault)||45),'','Time logged by task:',...(logged.length?logged.map(t=>'- '+t.title+' | '+fmtSecs(totalSecs(t))):['- No logged time yet'])].join('\n');}
+function noteText(n){const linked=(data.tasks||[]).find(t=>t.id===n.taskId);return ["Lew's Tracker - Note",'Generated: '+new Date().toLocaleString(),'','Title: '+(n.title||'Untitled'),'Created: '+(n.created||''),'Linked Task: '+(linked?linked.title:'-'),'','Body:',n.body||''].join('\n');}
+function templateText(name,lines){return ["Lew's Tracker - Template",'Generated: '+new Date().toLocaleString(),'','Template: '+name,'','Checklist Lines:',...(lines||[]).map(x=>'- '+x)].join('\n');}
+function budgetText(b){const t=totals(b);return ["Lew's Tracker - Finance Budget",'Generated: '+new Date().toLocaleString(),'','Budget: '+(b.name||'Budget'),'Type: '+(b.type||''),'Currency: '+(b.currency||''),'Income: '+moneyFmt(t.inc,b.currency),'Expense: '+moneyFmt(t.exp,b.currency),'Balance: '+moneyFmt(t.bal,b.currency),'Paid: '+moneyFmt(t.paid,b.currency),'Pending: '+moneyFmt(t.unpaid,b.currency),'','Categories:',...(b.categories||[]).map(c=>'- '+c.name+' | '+c.type+' | '+moneyFmt(c.amount,b.currency)+' | '+(c.paid?'Paid':'Pending'))].join('\n');}
+async function writeTabFolderFiles(){
+  if(!trackerDirHandle||!data)return;
+  // Create all main tab folders first.
+  const dashboardFolder=await getTabFolder('dashboard',true);
+  const tasksFolder=await getTabFolder('tasks',true);
+  const templatesFolder=await getTabFolder('templates',true);
+  const insightsFolder=await getTabFolder('insights',true);
+  const calendarFolder=await getTabFolder('calendar',true);
+  const notesFolder=await getTabFolder('notes',true);
+  const financeFolder=await getTabFolder('finance',true);
+  const focusFolder=await getTabFolder('focus',true);
+  const settingsFolder=await getTabFolder('settings',true);
+
+  await writeTextFile(dashboardFolder,'dashboard-summary.txt',dashboardSummaryText());
+  await writeJsonFile(dashboardFolder,'dashboard-data.json',{tasks:(data.tasks||[]).length,notes:(data.notes||[]).length,budgets:(data.budgets||[]).length,generatedAt:new Date().toISOString()});
+
+  // To Do List tab: one folder per task, using task name.
+  await writeAllTaskDetails();
+  await writeJsonFile(tasksFolder,'to-do-list.json',(data.tasks||[]).map(ensure));
+
+  await writeJsonFile(templatesFolder,'templates.json',data.templates||{});
+  for(const [name,lines] of Object.entries(data.templates||{}))await writeTextFile(templatesFolder,safeFileName(name)+'.txt',templateText(name,lines));
+
+  await writeTextFile(insightsFolder,'insights-summary.txt',insightsSummaryText());
+  await writeJsonFile(insightsFolder,'insights-data.json',{generatedAt:new Date().toISOString(),tasks:(data.tasks||[]).map(ensure)});
+
+  await writeTextFile(calendarFolder,'calendar-tasks.txt',calendarSummaryText());
+  await writeJsonFile(calendarFolder,'calendar-tasks.json',(data.tasks||[]).map(ensure).filter(t=>t.due));
+
+  await writeJsonFile(notesFolder,'notes.json',data.notes||[]);
+  for(const n of (data.notes||[]))await writeTextFile(notesFolder,safeFileName((n.title||'Untitled Note')+'-'+n.id)+'.txt',noteText(n));
+
+  await writeJsonFile(financeFolder,'finance.json',data.budgets||[]);
+  for(const b of (data.budgets||[])){const bf=await financeFolder.getDirectoryHandle(safeFileName((b.name||'Budget')+'-'+b.id),{create:true});await writeTextFile(bf,'budget-details.txt',budgetText(b));}
+
+  await writeTextFile(focusFolder,'focus-summary.txt',focusSummaryText());
+  await writeJsonFile(settingsFolder,'settings.json',data.settings||{});
+}
+
+async function persistBlobToTaskFolder(blob,name,type,size,task){if(!trackerDirHandle||!task)return null;const ok=await verifyFolderPermission(trackerDirHandle,true);if(!ok)return null;const folder=await getTaskFolder(task,true);const fileName=safeFileName(name||'attachment');let finalName=fileName;try{await folder.getFileHandle(finalName,{create:false});finalName=Date.now()+'-'+Math.floor(Math.random()*1e6)+'-'+fileName;}catch(_){/* filename is free */}const fh=await folder.getFileHandle(finalName,{create:true});const writable=await fh.createWritable();await writable.write(blob);await writable.close();task.taskFolder=taskFolderName(task);return{folderFileName:finalName,taskFolder:task.taskFolder,external:true,type:type||blob.type||'application/octet-stream',size:size||blob.size||0};}
+async function persistFileToTaskFolder(file,task){const meta=await persistBlobToTaskFolder(file,file.name,file.type,file.size,task);if(!meta)return null;return{id:uid(),name:file.name,type:meta.type,size:meta.size,added:new Date().toISOString(),folderFileName:meta.folderFileName,taskFolder:meta.taskFolder,external:true};}
+async function migrateEmbeddedFilesToTaskFolders(){if(!trackerDirHandle||!data)return 0;let count=0;for(const t of data.tasks||[]){for(const f of t.files||[]){if(f.data&&!f.folderFileName){const blob=dataUrlToBlob(f.data);const meta=await persistBlobToTaskFolder(blob,f.name,f.type,f.size,t);if(meta){f.folderFileName=meta.folderFileName;f.taskFolder=meta.taskFolder;f.external=true;f.type=f.type||meta.type;f.size=f.size||meta.size;delete f.data;count++;}}}await writeTaskDetailsFile(t);}return count;}
+function trackerBackupPayload(){return{app:"Lew's Tracker",format:'folder-primary-tab-folders',version:'v8.10-tab-folder-storage',savedAt:new Date().toISOString(),user:typeof currentUser!=='undefined'&&currentUser?currentUser:'local',data:fullDataCopyForFolder(data)};}
+async function chooseSaveFolder(){if(!supportsFolderSave()){alert('Folder storage is not supported in this browser. Please use Chrome or Edge on your HTTPS/GitHub Pages site.');setFolderSaveStatus('Folder storage unavailable in this browser');return;}try{trackerDirHandle=await window.showDirectoryPicker({mode:'readwrite'});const ok=await verifyFolderPermission(trackerDirHandle,true);if(!ok){setFolderSaveStatus('Folder permission denied');return;}await saveFolderHandle(trackerDirHandle);setFolderSaveStatus('Folder selected ✓');let loaded=false;try{const fh=await trackerDirHandle.getFileHandle(TRACKER_FOLDER_FILENAME,{create:false});if(fh&&confirm('A tracker data file already exists in this folder. Load it now?'))loaded=await loadFromSelectedFolder(false);}catch(_){ }if(!loaded){const migrated=await migrateEmbeddedFilesToTaskFolders();await saveToSelectedFolder(true);if(migrated)toastMsg('Moved '+migrated+' attachment(s) into task folders ✓');}}catch(err){if(err&&err.name==='AbortError')return;console.error('Folder selection failed:',err);setFolderSaveStatus('Folder selection failed');alert('Folder selection failed. Check the browser console for details.');}}
+async function restoreSaveFolder(){if(!supportsFolderSave()){setFolderSaveStatus('Folder storage unavailable in this browser');return;}try{const handle=await getSavedFolderHandle();if(!handle){setFolderSaveStatus('No folder selected — using browser cache only');return;}trackerDirHandle=handle;const ok=await verifyFolderPermission(trackerDirHandle,false);setFolderSaveStatus(ok?'Folder ready ✓':'Folder permission needed — click Save Now or Select Storage Folder');}catch(err){console.warn('Could not restore folder access:',err);setFolderSaveStatus('No folder selected — using browser cache only');}}
+async function saveToSelectedFolder(manual){if(!trackerDirHandle){if(manual)alert('Please select a storage folder first.');setFolderSaveStatus('No folder selected — using browser cache only');return false;}try{const ok=await verifyFolderPermission(trackerDirHandle,!!manual);if(!ok){setFolderSaveStatus('Folder permission needed — click Save Now');if(manual)alert('Permission is required before saving to the selected folder.');return false;}await migrateEmbeddedFilesToTaskFolders();await writeTabFolderFiles();const fileHandle=await trackerDirHandle.getFileHandle(TRACKER_FOLDER_FILENAME,{create:true});const writable=await fileHandle.createWritable();await writable.write(JSON.stringify(trackerBackupPayload(),null,2));await writable.close();if(STORE&&data)localStorage.setItem(STORE,JSON.stringify(lightweightDataCopy(data)));const stamp=new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit'});setFolderSaveStatus('Saved to folder ✓ '+stamp+' — tab folders updated');if(manual)toastMsg('Saved tab folders ✓');return true;}catch(err){console.error('Folder save failed:',err);setFolderSaveStatus('Folder save failed');if(manual)alert('Folder save failed. Check the browser console for details.');return false;}}
 async function loadFromSelectedFolder(manual){if(!trackerDirHandle){if(manual)alert('Please select a storage folder first.');return false;}try{const ok=await verifyFolderPermission(trackerDirHandle,!!manual);if(!ok){setFolderSaveStatus('Folder permission needed — click Load From Folder');return false;}const fh=await trackerDirHandle.getFileHandle(TRACKER_FOLDER_FILENAME,{create:false});const file=await fh.getFile();const json=JSON.parse(await file.text());const incoming=json.data||json;data=Object.assign(structuredClone(DEF),incoming);data.templates=data.templates||structuredClone(defaultTemplates);data.settings=Object.assign(structuredClone(DEF.settings),data.settings||{});data.trash=data.trash||[];if(STORE)localStorage.setItem(STORE,JSON.stringify(lightweightDataCopy(data)));applySettings();renderAll();const stamp=new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit'});setFolderSaveStatus('Loaded from folder ✓ '+stamp);if(manual)toastMsg('Loaded from selected folder ✓');return true;}catch(err){console.error('Folder load failed:',err);setFolderSaveStatus('Could not load folder data');if(manual)alert('Could not load lews-tracker-data.json from the selected folder.');return false;}}
 function scheduleFolderSave(){if(!trackerDirHandle)return;clearTimeout(trackerFolderSaveTimer);trackerFolderSaveTimer=setTimeout(()=>saveToSelectedFolder(false),900);}
 
 // ── Task reference files ─────────────────────────────────────────────────────
 function bytesFmt(bytes){bytes=Number(bytes||0);if(bytes<1024)return bytes+' B';if(bytes<1024*1024)return(bytes/1024).toFixed(1)+' KB';return(bytes/1024/1024).toFixed(1)+' MB';}
 function taskFileIcon(type,name){const n=(name||'').toLowerCase(),t=(type||'').toLowerCase();if(t.includes('image')||/\.(png|jpg|jpeg|gif|webp|svg)$/.test(n))return'🖼';if(t.includes('pdf')||n.endsWith('.pdf'))return'📄';if(/\.(doc|docx)$/.test(n))return'📝';if(/\.(xls|xlsx|csv)$/.test(n))return'📊';if(/\.(dwg|dxf|rvt|ifc|nwc|nwd|skp)$/.test(n))return'🏗';if(/\.(zip|rar|7z)$/.test(n))return'🗜';return'📎';}
-function readFilesAsDataUrls(fileList){
+function readFilesAsDataUrls(fileList,task){
   const files=Array.from(fileList||[]);
   return Promise.all(files.map(f=>new Promise(async (resolve,reject)=>{
     try{
-      if(trackerDirHandle){
-        const external=await persistFileToFolder(f);
+      if(trackerDirHandle&&task){
+        const external=await persistFileToTaskFolder(f,task);
         if(external){resolve(external);return;}
       }
       const r=new FileReader();
@@ -1411,7 +1492,7 @@ function readFilesAsDataUrls(fileList){
 }
 function renderTaskFiles(t){t=ensure(t);const files=t.files||[];return`<div class="task-files" style="display:grid;gap:6px"><div class="row" style="justify-content:space-between;align-items:center"><b class="small">Reference files (${files.length})</b><label class="btn" style="margin:0">+ Attach<input type="file" multiple hidden onchange="addFilesToTask(${t.id},this.files);this.value=''" /></label></div>`+(files.length?files.map(f=>`<div class="item" style="padding:6px 8px;border-left-width:1px"><div style="min-width:0"><span style="margin-right:6px">${taskFileIcon(f.type,f.name)}</span><b class="small" title="${esc(f.name)}">${esc(f.name)}</b><div class="small">${bytesFmt(f.size)} · ${f.added?new Date(f.added).toLocaleDateString():''}</div></div><div class="row" style="gap:4px"><button class="icon" title="Download" onclick="downloadTaskFile(${t.id},${f.id})">⬇</button><button class="icon danger" title="Remove" onclick="deleteTaskFile(${t.id},${f.id})">×</button></div></div>`).join(''):`<div class="empty" style="padding:8px;font-size:.72rem">No reference files attached.</div>`)+`</div>`;}
 function renderTaskModalFiles(t){const el=document.getElementById('taskExistingFiles');if(!el)return;if(!t){el.innerHTML='<div class="empty" style="padding:8px;font-size:.72rem">Attach files after choosing them below.</div>';return;}el.innerHTML=renderTaskFiles(t);}
-async function addFilesToTask(tid,fileList){const t=ensure(data.tasks.find(x=>x.id===tid));if(!t)return;const incoming=await readFilesAsDataUrls(fileList);if(!incoming.length)return;t.files=t.files||[];t.files.push(...incoming);save();renderTasks();toastMsg(incoming.length+' file(s) attached');}
+async function addFilesToTask(tid,fileList){const t=ensure(data.tasks.find(x=>x.id===tid));if(!t)return;const incoming=await readFilesAsDataUrls(fileList,t);if(!incoming.length)return;t.files=t.files||[];t.files.push(...incoming);save();renderTasks();toastMsg(incoming.length+' file(s) attached');}
 async function downloadTaskFile(tid,fid){
   const t=ensure(data.tasks.find(x=>x.id===tid));
   const f=(t.files||[]).find(x=>x.id===fid);
@@ -1421,12 +1502,11 @@ async function downloadTaskFile(tid,fid){
       if(!trackerDirHandle){toastMsg('Select the storage folder first');return;}
       const ok=await verifyFolderPermission(trackerDirHandle,true);
       if(!ok){toastMsg('Folder permission needed');return;}
-      const dir=await getAttachmentDir(false);
-      const fh=await dir.getFileHandle(f.folderFileName,{create:false});
+      const folder=await getTaskFolder(t,false);
+      const fh=await folder.getFileHandle(f.folderFileName,{create:false});
       const file=await fh.getFile();
       const url=URL.createObjectURL(file);
-      const a=document.createElement('a');
-      a.href=url;a.download=f.name||f.folderFileName;a.click();
+      const a=document.createElement('a');a.href=url;a.download=f.name||f.folderFileName;a.click();
       setTimeout(()=>URL.revokeObjectURL(url),1000);
       return;
     }
@@ -1434,7 +1514,7 @@ async function downloadTaskFile(tid,fid){
   }catch(err){console.error('Download failed:',err);}
   toastMsg('File not available. Select the original storage folder.');
 }
-function deleteTaskFile(tid,fid){const t=ensure(data.tasks.find(x=>x.id===tid));const f=(t.files||[]).find(x=>x.id===fid);t.files=(t.files||[]).filter(x=>x.id!==fid);if(f&&f.external&&f.folderFileName&&trackerDirHandle){getAttachmentDir(false).then(dir=>dir.removeEntry(f.folderFileName).catch(()=>{})).catch(()=>{});}save();renderTasks();toastUndo('File removed',()=>{t.files=t.files||[];if(f)t.files.push(f);save();renderTasks();});}
+function deleteTaskFile(tid,fid){const t=ensure(data.tasks.find(x=>x.id===tid));const f=(t.files||[]).find(x=>x.id===fid);t.files=(t.files||[]).filter(x=>x.id!==fid);if(f&&f.external&&f.folderFileName&&trackerDirHandle){getTaskFolder(t,false).then(dir=>dir.removeEntry(f.folderFileName).catch(()=>{})).catch(()=>{});}save();renderTasks();toastUndo('File removed',()=>{t.files=t.files||[];if(f)t.files.push(f);save();renderTasks();});}
 
 
 // ── Toast ─────────────────────────────────────────────────────────────────────
@@ -1625,7 +1705,7 @@ function quickAdd(){let raw=quickInput.value.trim();if(!raw)return;let first=(ra
 quickInput?.addEventListener('keydown',e=>{if(e.key==='Enter')quickAdd()});
 
 function openTask(id){let t=id?ensure(data.tasks.find(x=>x.id===id)):null;taskModalTitle.textContent=t?'Edit Task':'New Task';taskId.value=t?.id||'';taskTitle.value=t?.title||'';taskPriority.value=t?.priority||'medium';taskStatus.value=t?.status||'todo';taskDue.value=t?.due||today();taskTags.value=(t?.tags||[]).join(', ');taskRefs.value=t?.refs||'';taskRecurring.value=t?.recurring||'none';if(taskFiles)taskFiles.value='';renderTaskModalFiles(t);openModal('taskModal')}
-async function saveTask(){let title=taskTitle.value.trim();if(!title)return;let obj={title,priority:taskPriority.value,status:taskStatus.value,due:taskDue.value,tags:taskTags.value.split(',').map(x=>x.trim()).filter(Boolean),refs:taskRefs.value,recurring:taskRecurring.value,created:today()};let t;if(taskId.value){t=ensure(data.tasks.find(x=>x.id==taskId.value));Object.assign(t,obj)}else{t=createTask(obj)}try{const picked=document.getElementById('taskFiles');const incoming=await readFilesAsDataUrls(picked?picked.files:[]);if(incoming.length){t.files=t.files||[];t.files.push(...incoming);}}catch(e){toastMsg('File attach error: '+(e.message||e));}closeModal('taskModal');save();renderAll();toastMsg('Saved')}
+async function saveTask(){let title=taskTitle.value.trim();if(!title)return;let obj={title,priority:taskPriority.value,status:taskStatus.value,due:taskDue.value,tags:taskTags.value.split(',').map(x=>x.trim()).filter(Boolean),refs:taskRefs.value,recurring:taskRecurring.value,created:today()};let t;if(taskId.value){t=ensure(data.tasks.find(x=>x.id==taskId.value));Object.assign(t,obj)}else{t=createTask(obj)}try{const picked=document.getElementById('taskFiles');const incoming=await readFilesAsDataUrls(picked?picked.files:[],t);if(incoming.length){t.files=t.files||[];t.files.push(...incoming);}}catch(e){toastMsg('File attach error: '+(e.message||e));}closeModal('taskModal');save();renderAll();toastMsg('Saved')}
 function toggleOpen(id){openTaskId=openTaskId===id?null:id;renderTasks()}
 function delTask(id){const t=data.tasks.find(x=>x.id===id);if(!t)return;data.trash=data.trash||[];data.trash.unshift({...ensure(t),deletedAt:Date.now()});data.tasks=data.tasks.filter(x=>x.id!==id);data.notes.forEach(n=>{if(n.taskId===id)n.taskId=null});save();renderAll();toastUndo('Task deleted',()=>{const tr=data.trash.find(x=>x.id===id);if(tr){data.tasks.unshift(tr);data.trash=data.trash.filter(x=>x.id!==id);save();renderAll();}})}
 function toggleDone(id,evt){let t=ensure(data.tasks.find(x=>x.id===id));const wasDone=t.status==='done';t.status=wasDone?'todo':'done';if(!wasDone&&t.recurring&&t.recurring!=='none'){spawnNextRecurring(t);}save();renderAll();if(!wasDone&&evt){confettiBurst(evt);}}
