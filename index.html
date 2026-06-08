@@ -639,7 +639,7 @@ body.density-ultra .card{padding:calc((13px - var(--compact)*3px)*.66)}
       <div class="login-help">Tip: leave <b>Remember me</b> off if you want the login screen to return when the browser is closed.</div>
       <div class="login-divider">or</div>
       <button class="btn" onclick="doGuestLogin()" style="width:100%;justify-content:center;opacity:.7">👤 Continue as Guest</button>
-      <div class="login-help" style="margin-top:6px">Guest data is stored in this browser only and won't save locally.</div>
+      <div class="login-help" style="margin-top:6px">Guest data is stored in this browser only.</div>
     </div>
 
     <!-- Register form -->
@@ -1111,6 +1111,16 @@ body.density-ultra .card{padding:calc((13px - var(--compact)*3px)*.66)}
         <label class="small"><input type="checkbox" id="introToggle" onchange="setIntroReplay(this.checked)" style="width:auto"> Always show intro on launch</label><br>
         <label class="small"><input type="checkbox" id="autoBackupHint" onchange="setBackupHint(this.checked)" style="width:auto"> Remind me to export backups</label><br><br>
         <p class="small">Lew's Tracker saves locally in this browser. Export backups regularly.</p>
+        <div class="card" style="border-style:dashed;border-color:color-mix(in srgb,var(--accent) 35%,transparent);margin:10px 0;background:color-mix(in srgb,var(--accent) 6%,transparent)">
+          <h3 style="margin-bottom:8px">Folder Backup</h3>
+          <p class="small" style="margin-top:0">Choose a folder on this device. The app will keep using browser storage for speed, and will also mirror a JSON backup file to the selected folder after saves.</p>
+          <div class="panel-actions" style="margin-bottom:8px;padding-bottom:0">
+            <button class="btn primary" onclick="chooseSaveFolder()">📁 Select Save Folder</button>
+            <button class="btn" onclick="saveToSelectedFolder(true)">💾 Save Backup Now</button>
+          </div>
+          <div class="small" id="folderSaveStatus">No folder selected</div>
+        </div>
+
         <div class="panel-actions"><button class="btn primary" onclick="exportData()">Export</button><button class="btn" onclick="importFile.click()">Import</button><button class="btn" onclick="document.getElementById('intro').classList.remove('hide')">Replay Intro</button><button class="btn danger" onclick="resetAll()">Reset</button></div>
       </div>
     </div>
@@ -1335,10 +1345,11 @@ const icons={dashboard:'⌂',focus:'◎',tasks:'□',templates:'▧',insights:'�
 const MOBILE_MAIN=['dashboard','tasks','focus','calendar'];
 
 function load(){try{let x=Object.assign(structuredClone(DEF),JSON.parse(localStorage.getItem(STORE)||'{}'));x.templates=x.templates||structuredClone(defaultTemplates);x.settings=Object.assign(structuredClone(DEF.settings),x.settings||{});x.trash=x.trash||[];return x}catch{return structuredClone(DEF)}}
-function save(){
-  // Local-only save: persist this user's data in this browser.
-  if(STORE&&data)localStorage.setItem(STORE,JSON.stringify(data));
-  try{stats();storage();}catch(e){console.warn('post-save UI refresh skipped:',e);}
+function save(){  
+  // Local-only save: persist this user's data in this browser.  
+  if(STORE&&data)localStorage.setItem(STORE,JSON.stringify(data));  
+  try{stats();storage();}catch(e){console.warn('post-save UI refresh skipped:',e);}  
+  scheduleFolderSave();
 }
 function dateKey(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
 function today(){return dateKey(new Date())}
@@ -1734,6 +1745,135 @@ function setIntroReplay(v){data.settings.introAlways=!!v;save()}
 function setBackupHint(v){data.settings.backupHint=!!v;save()}
 function setDefaultView(v){data.settings.defaultView=v;save()}
 
+
+
+// ── User-selected folder backup ──────────────────────────────────────────────
+// Uses the browser File System Access API where available (Chrome/Edge over HTTPS).
+let trackerDirHandle = null;
+let trackerFolderSaveTimer = null;
+const TRACKER_FOLDER_DB = 'lews_tracker_folder_db';
+const TRACKER_FOLDER_STORE = 'handles';
+const TRACKER_FOLDER_KEY = 'tracker-folder';
+const TRACKER_FOLDER_FILENAME = 'lews-tracker-data.json';
+
+function setFolderSaveStatus(msg){
+  const el=document.getElementById('folderSaveStatus');
+  if(el)el.textContent=msg;
+}
+function supportsFolderSave(){return 'showDirectoryPicker' in window && 'indexedDB' in window;}
+function openFolderDb(){
+  return new Promise((resolve,reject)=>{
+    const req=indexedDB.open(TRACKER_FOLDER_DB,1);
+    req.onupgradeneeded=()=>{
+      const db=req.result;
+      if(!db.objectStoreNames.contains(TRACKER_FOLDER_STORE))db.createObjectStore(TRACKER_FOLDER_STORE);
+    };
+    req.onsuccess=()=>resolve(req.result);
+    req.onerror=()=>reject(req.error);
+  });
+}
+async function saveFolderHandle(handle){
+  const db=await openFolderDb();
+  return new Promise((resolve,reject)=>{
+    const tx=db.transaction(TRACKER_FOLDER_STORE,'readwrite');
+    tx.objectStore(TRACKER_FOLDER_STORE).put(handle,TRACKER_FOLDER_KEY);
+    tx.oncomplete=()=>resolve();
+    tx.onerror=()=>reject(tx.error);
+  });
+}
+async function getSavedFolderHandle(){
+  const db=await openFolderDb();
+  return new Promise((resolve,reject)=>{
+    const tx=db.transaction(TRACKER_FOLDER_STORE,'readonly');
+    const req=tx.objectStore(TRACKER_FOLDER_STORE).get(TRACKER_FOLDER_KEY);
+    req.onsuccess=()=>resolve(req.result||null);
+    req.onerror=()=>reject(req.error);
+  });
+}
+async function verifyFolderPermission(handle,requestWrite){
+  if(!handle)return false;
+  const opts={mode:'readwrite'};
+  if((await handle.queryPermission(opts))==='granted')return true;
+  if(requestWrite && (await handle.requestPermission(opts))==='granted')return true;
+  return false;
+}
+function trackerBackupPayload(){
+  return {
+    app:"Lew's Tracker",
+    format:'local-folder-backup',
+    version:'v8.8-folder-backup',
+    savedAt:new Date().toISOString(),
+    user:typeof currentUser!=='undefined'&&currentUser?currentUser:'local',
+    data:data
+  };
+}
+async function chooseSaveFolder(){
+  if(!supportsFolderSave()){
+    alert('Folder saving is not supported in this browser. Please use Chrome or Edge on your HTTPS/GitHub Pages site.');
+    setFolderSaveStatus('Folder backup unavailable in this browser');
+    return;
+  }
+  try{
+    trackerDirHandle=await window.showDirectoryPicker({mode:'readwrite'});
+    const ok=await verifyFolderPermission(trackerDirHandle,true);
+    if(!ok){setFolderSaveStatus('Folder permission denied');return;}
+    await saveFolderHandle(trackerDirHandle);
+    setFolderSaveStatus('Folder selected ✓');
+    await saveToSelectedFolder(true);
+  }catch(err){
+    if(err&&err.name==='AbortError')return;
+    console.error('Folder selection failed:',err);
+    setFolderSaveStatus('Folder selection failed');
+    alert('Folder selection failed. Check the browser console for details.');
+  }
+}
+async function restoreSaveFolder(){
+  if(!supportsFolderSave()){
+    setFolderSaveStatus('Folder backup unavailable in this browser');
+    return;
+  }
+  try{
+    const handle=await getSavedFolderHandle();
+    if(!handle){setFolderSaveStatus('No folder selected');return;}
+    trackerDirHandle=handle;
+    const ok=await verifyFolderPermission(trackerDirHandle,false);
+    setFolderSaveStatus(ok?'Folder ready ✓':'Folder permission needed — click Save Backup Now');
+  }catch(err){
+    console.warn('Could not restore folder access:',err);
+    setFolderSaveStatus('No folder selected');
+  }
+}
+async function saveToSelectedFolder(manual){
+  if(!trackerDirHandle){
+    if(manual)alert('Please select a save folder first.');
+    setFolderSaveStatus('No folder selected');
+    return;
+  }
+  try{
+    const ok=await verifyFolderPermission(trackerDirHandle,!!manual);
+    if(!ok){
+      setFolderSaveStatus('Folder permission needed — click Save Backup Now');
+      if(manual)alert('Permission is required before saving to the selected folder.');
+      return;
+    }
+    const fileHandle=await trackerDirHandle.getFileHandle(TRACKER_FOLDER_FILENAME,{create:true});
+    const writable=await fileHandle.createWritable();
+    await writable.write(JSON.stringify(trackerBackupPayload(),null,2));
+    await writable.close();
+    const stamp=new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+    setFolderSaveStatus('Saved to folder ✓ '+stamp+' — '+TRACKER_FOLDER_FILENAME);
+    if(manual)toastMsg('Saved folder backup ✓');
+  }catch(err){
+    console.error('Folder backup failed:',err);
+    setFolderSaveStatus('Folder save failed');
+    if(manual)alert('Folder save failed. Check the browser console for details.');
+  }
+}
+function scheduleFolderSave(){
+  if(!trackerDirHandle)return;
+  clearTimeout(trackerFolderSaveTimer);
+  trackerFolderSaveTimer=setTimeout(()=>saveToSelectedFolder(false),900);
+}
 
 // ── Export / Import ───────────────────────────────────────────────────────────
 function exportData(){const exp=Object.assign({},data,{_owner:currentUser,_version:'v8.2',_exported:new Date().toISOString()});const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(exp,null,2)],{type:'application/json'}));a.download='lews-tracker-'+(currentUser||'backup')+'-'+today()+'.json';a.click();URL.revokeObjectURL(a.href);toastMsg('Downloaded backup for '+currentUser)}
@@ -2297,6 +2437,7 @@ function _finishEnterApp(){
   // Update UI labels
   document.querySelectorAll('#currentUserLabel,#currentUserLabel2').forEach(ul=>ul.textContent=currentUser);
   renderUsers();
+  restoreSaveFolder().catch(console.warn);
   // v8.5: Restore pet if enabled or auto-show
   setTimeout(()=>{
     const s=data.settings;
