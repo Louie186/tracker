@@ -579,6 +579,82 @@ body.density-ultra .card{padding:calc((13px - var(--compact)*3px)*.66)}
 .budget-collapse-btn:hover{border-color:color-mix(in srgb,var(--accent) 45%,transparent)}
 
 @media(prefers-reduced-motion:reduce){*,.card,.item,.toast div{animation:none!important;transition:none!important}.cursor-glow,.ambient-light,.intro-particles{display:none!important}}
+
+/* ── Calendar equal-size day cells v8.11 ─────────────────────────────────── */
+.cal-grid#calendarGrid,
+#calendarGrid.cal-grid{
+  display:grid !important;
+  grid-template-columns:repeat(7,minmax(0,1fr)) !important;
+  gap:5px !important;
+  align-items:stretch !important;
+}
+#calendarGrid .weekday{
+  min-width:0 !important;
+}
+#calendarGrid .day{
+  height:88px !important;
+  min-height:88px !important;
+  max-height:88px !important;
+  min-width:0 !important;
+  overflow:hidden !important;
+  display:flex !important;
+  flex-direction:column !important;
+  justify-content:space-between !important;
+  align-items:flex-start !important;
+}
+#calendarGrid .day b{
+  font-size:.86rem;
+  line-height:1;
+}
+#calendarGrid .mini{
+  display:none !important;
+}
+.cal-task-marker{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:4px;
+  max-width:100%;
+  height:20px;
+  padding:0 7px;
+  border-radius:999px;
+  background:color-mix(in srgb,var(--accent) 20%,transparent);
+  border:1px solid color-mix(in srgb,var(--accent) 45%,transparent);
+  color:var(--accent);
+  font-size:.66rem;
+  font-weight:950;
+  line-height:1;
+  white-space:nowrap;
+}
+.cal-task-marker::before{
+  content:'';
+  width:6px;
+  height:6px;
+  border-radius:50%;
+  background:var(--accent);
+  box-shadow:0 0 10px color-mix(in srgb,var(--accent) 75%,transparent);
+}
+@media(max-width:900px){
+  #calendarGrid .day{
+    height:72px !important;
+    min-height:72px !important;
+    max-height:72px !important;
+    padding:5px !important;
+  }
+  .cal-task-marker{
+    height:18px;
+    padding:0 6px;
+    font-size:.6rem;
+  }
+}
+@media(max-width:430px){
+  #calendarGrid .day{
+    height:62px !important;
+    min-height:62px !important;
+    max-height:62px !important;
+  }
+}
+
 </style>
 </head>
 <body>
@@ -1747,7 +1823,21 @@ function due(k){return data.tasks.map(ensure).filter(t=>t.due===k)}
 function addCalendarTask(title,k=selected){if(!title)return;createTask({title,priority:'medium',status:'todo',due:k,tags:['Calendar'],source:'calendar'});selected=k;toastMsg('Calendar task added')}
 function addEvent(){const el=document.getElementById('eventInput');let v=(el?.value||'').trim();if(!v)return;if(el)el.value='';addCalendarTask(v,selected);save();renderAll()}
 function moveMonth(n){current.setMonth(current.getMonth()+n);renderCalendar()}
-function renderCalendar(){if(!calendarGrid)return;calendarGrid.innerHTML='';['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].forEach(d=>calendarGrid.innerHTML+=`<div class="weekday">${d}</div>`);let y=current.getFullYear(),m=current.getMonth(),start=new Date(y,m,1);monthLabel.textContent=current.toLocaleDateString('en-US',{month:'long',year:'numeric'});start.setDate(start.getDate()-start.getDay());for(let i=0;i<42;i++){let d=new Date(start);d.setDate(start.getDate()+i);let k=dateKey(d),du=due(k);calendarGrid.innerHTML+=`<div class="day ${d.getMonth()!==m?'muted':''} ${k===today()?'today':''} ${k===selected?'selected':''}" onclick="selected='${k}';renderAll()"><b>${d.getDate()}</b>${du.slice(0,3).map(t=>`<span class="mini">□ ${esc(t.title)}</span>`).join('')}</div>`}}
+function calendarTaskMarker(k){const items=due(k);if(!items.length)return '';const open=items.filter(t=>ensure(t).status!=='done').length;const label=open?open:items.length;const title=items.length+' task(s) on this day';return `<span class="cal-task-marker" title="${title}">${label}</span>`;}
+function renderCalendar(){
+  if(!calendarGrid)return;
+  calendarGrid.innerHTML='';
+  ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].forEach(d=>calendarGrid.innerHTML+=`<div class="weekday">${d}</div>`);
+  let y=current.getFullYear(),m=current.getMonth(),start=new Date(y,m,1);
+  monthLabel.textContent=current.toLocaleDateString('en-US',{month:'long',year:'numeric'});
+  start.setDate(start.getDate()-start.getDay());
+  for(let i=0;i<42;i++){
+    let d=new Date(start);
+    d.setDate(start.getDate()+i);
+    let k=dateKey(d);
+    calendarGrid.innerHTML+=`<div class="day ${d.getMonth()!==m?'muted':''} ${k===today()?'today':''} ${k===selected?'selected':''}" onclick="selected='${k}';renderAll()"><b>${d.getDate()}</b>${calendarTaskMarker(k)}</div>`;
+  }
+}
 function renderDay(){if(!dayList)return;selectedTitle.textContent='Tasks for '+selected;let arr=due(selected).map(t=>`<div class="item pri-${t.priority}"><div class="todo-text"><b>Task:</b> ${esc(t.title)}</div><button class="btn" onclick="show('tasks');openTaskId=${t.id};renderTasks()">Open</button></div>`);dayList.innerHTML=arr.join('')||'<div class="empty">No tasks this day.</div>'}
 
 // ── Notes ─────────────────────────────────────────────────────────────────────
