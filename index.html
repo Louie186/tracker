@@ -17,7 +17,7 @@
 <meta name="twitter:title" content="Lew's Tracker — BIM Command Center">
 <meta name="twitter:description" content="Mobile-ready BIM task tracker with focus timer, calendar, notes, finance, and local storage.">
 <link rel="manifest" href="manifest.json">
-<title>Lew's Tracker v8.8</title>
+<title>Lew's Tracker v9.0 Pro</title>
 <style>
 :root{color-scheme:dark;--bg:#070807;--bg2:#10120f;--panel:rgba(18,20,16,.78);--soft:rgba(255,255,255,.06);--soft2:rgba(255,255,255,.10);--ink:#f8f2e8;--muted:#aaa297;--line:rgba(255,255,255,.13);--accent:#d8b76d;--accent2:#ff9655;--green:#97dc8d;--red:#ff7474;--shadow:0 18px 55px rgba(0,0,0,.34);--r:22px;--fs:1;--tabscale:1;--finScale:1;--compact:0;--font:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;--glass:0;--nav-h:64px}
 body.light{color-scheme:light;--bg:#eef1ed;--bg2:#f7f8f4;--panel:rgba(251,250,244,.9);--soft:rgba(40,56,60,.055);--soft2:rgba(40,56,60,.10);--ink:#202521;--muted:#5a6360;--line:rgba(40,56,60,.15);--shadow:0 18px 45px rgba(65,75,70,.12);--accent:#a07830;--accent2:#cc6622}
@@ -656,6 +656,256 @@ body.density-ultra .card{padding:calc((13px - var(--compact)*3px)*.66)}
 }
 
 </style>
+<!-- ═══════════════════ PRO DESIGN LAYER v9.0 ═══════════════════
+     Pure-CSS visual upgrade: glassmorphism, gradients, animations.
+     Sits after the original stylesheet so it wins the cascade.
+     Zero JS changes — all app functionality untouched. -->
+<style id="proDesignLayer">
+/* ── Tokens ──────────────────────────────────────────────────── */
+:root{
+  --pro-glow:color-mix(in srgb,var(--accent) 30%,transparent);
+  --shadow:0 24px 60px rgba(0,0,0,.38),0 4px 14px rgba(0,0,0,.20);
+}
+body.light,body.pastel,body.melliea{
+  --shadow:0 20px 48px rgba(60,72,66,.14),0 3px 10px rgba(60,72,66,.08);
+}
+
+/* ── Ambient aurora background (theme-aware, GPU-friendly) ───── */
+body::after{
+  content:"";position:fixed;inset:-22%;z-index:-3;pointer-events:none;
+  background:
+    radial-gradient(36% 36% at 16% 12%,color-mix(in srgb,var(--accent) 30%,transparent),transparent 70%),
+    radial-gradient(32% 32% at 86% 82%,color-mix(in srgb,var(--accent2) 22%,transparent),transparent 70%),
+    radial-gradient(26% 26% at 72% 18%,color-mix(in srgb,var(--green) 9%,transparent),transparent 70%);
+  filter:blur(70px) saturate(1.2);
+  animation:proAurora 42s ease-in-out infinite alternate;
+}
+@keyframes proAurora{
+  0%{transform:translate3d(0,0,0) rotate(0deg) scale(1)}
+  50%{transform:translate3d(3%,-2%,0) rotate(2.5deg) scale(1.06)}
+  100%{transform:translate3d(-3%,2%,0) rotate(-2.5deg) scale(1.02)}
+}
+
+/* ── Glass cards (always on) ─────────────────────────────────── */
+.card{
+  background:linear-gradient(160deg,rgba(255,255,255,.075),rgba(255,255,255,.015) 40%),var(--panel);
+  -webkit-backdrop-filter:blur(22px) saturate(1.45);
+  backdrop-filter:blur(22px) saturate(1.45);
+  border:1px solid color-mix(in srgb,var(--ink) 13%,transparent);
+  box-shadow:var(--shadow),inset 0 1px 0 rgba(255,255,255,.09);
+  transition:transform .25s cubic-bezier(.16,1,.3,1),box-shadow .25s ease,border-color .25s ease;
+}
+.card:hover{
+  transform:translateY(-2px);
+  border-color:color-mix(in srgb,var(--accent) 32%,var(--line));
+  box-shadow:0 28px 68px rgba(0,0,0,.40),
+             0 0 0 1px color-mix(in srgb,var(--accent) 12%,transparent),
+             inset 0 1px 0 rgba(255,255,255,.12);
+}
+body.light .card:hover,body.pastel .card:hover,body.melliea .card:hover{
+  box-shadow:0 26px 56px rgba(60,72,66,.18),
+             0 0 0 1px color-mix(in srgb,var(--accent) 14%,transparent),
+             inset 0 1px 0 rgba(255,255,255,.6);
+}
+
+/* ── Glass chrome: sidebar, bottom nav, top bar ──────────────── */
+.sidebar{
+  -webkit-backdrop-filter:blur(28px) saturate(1.5);
+  backdrop-filter:blur(28px) saturate(1.5);
+  border-right:1px solid color-mix(in srgb,var(--accent) 12%,var(--line));
+}
+.mobile{
+  -webkit-backdrop-filter:blur(26px) saturate(1.5);
+  backdrop-filter:blur(26px) saturate(1.5);
+  border-top:1px solid color-mix(in srgb,var(--accent) 16%,var(--line));
+  box-shadow:0 -12px 40px rgba(0,0,0,.28);
+}
+.top{
+  -webkit-backdrop-filter:blur(16px) saturate(1.3);
+  backdrop-filter:blur(16px) saturate(1.3);
+  background:linear-gradient(180deg,color-mix(in srgb,var(--bg) 72%,transparent) 60%,transparent);
+}
+
+/* ── Gradient typography ─────────────────────────────────────── */
+.title h2{
+  background:linear-gradient(135deg,var(--ink) 35%,color-mix(in srgb,var(--accent) 70%,var(--ink)));
+  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
+}
+.kpi .num{
+  background:linear-gradient(135deg,var(--ink) 20%,color-mix(in srgb,var(--accent) 75%,var(--ink)));
+  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
+}
+
+/* ── Primary buttons: gradient + shine sweep ─────────────────── */
+.btn.primary{
+  background:linear-gradient(135deg,var(--accent) 0%,color-mix(in srgb,var(--accent2) 80%,var(--accent)) 120%);
+  position:relative;overflow:hidden;
+  box-shadow:0 6px 18px var(--pro-glow);
+}
+.btn.primary::after{
+  content:"";position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(110deg,transparent 32%,rgba(255,255,255,.5) 50%,transparent 68%);
+  transform:translateX(-130%);transition:transform .55s ease;
+}
+.btn.primary:hover::after{transform:translateX(130%)}
+.btn.primary:hover{box-shadow:0 10px 26px var(--pro-glow)}
+.fab{
+  box-shadow:0 12px 32px var(--pro-glow),0 4px 12px rgba(0,0,0,.3);
+  transition:.25s cubic-bezier(.34,1.56,.64,1);
+}
+.fab:hover{transform:translateY(-3px) scale(1.05)}
+.fab:active{transform:scale(.92)}
+
+/* ── Nav glow ────────────────────────────────────────────────── */
+.nav-indicator{box-shadow:0 4px 18px var(--pro-glow)}
+.mobile button.active{box-shadow:0 4px 16px var(--pro-glow)}
+
+/* ── Lists, items, calendar ──────────────────────────────────── */
+.item:hover{
+  box-shadow:0 8px 20px rgba(0,0,0,.16),
+             0 0 0 1px color-mix(in srgb,var(--accent) 16%,transparent);
+}
+.day{transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease}
+.day:hover{transform:translateY(-2px);box-shadow:0 8px 18px rgba(0,0,0,.16)}
+.day.today{box-shadow:inset 0 0 0 1px var(--accent),0 0 14px var(--pro-glow)}
+
+/* ── Progress bars: shimmer ──────────────────────────────────── */
+.progress span,.fill,.sub-prog-bar{position:relative;overflow:hidden}
+.progress span::after,.fill::after{
+  content:"";position:absolute;inset:0;
+  background:linear-gradient(110deg,transparent 25%,rgba(255,255,255,.35) 50%,transparent 75%);
+  background-size:220% 100%;animation:proShine 2.6s linear infinite;
+}
+@keyframes proShine{from{background-position:220% 0}to{background-position:-120% 0}}
+
+/* ── Modals & overlays ───────────────────────────────────────── */
+.modal{background:rgba(0,0,0,.5);-webkit-backdrop-filter:blur(16px) saturate(1.2);backdrop-filter:blur(16px) saturate(1.2)}
+.modal-card{
+  -webkit-backdrop-filter:blur(30px) saturate(1.5);
+  backdrop-filter:blur(30px) saturate(1.5);
+  border:1px solid color-mix(in srgb,var(--accent) 16%,var(--line));
+  box-shadow:var(--shadow),inset 0 1px 0 rgba(255,255,255,.1);
+}
+@keyframes pop{
+  0%{opacity:0;transform:scale(.92) translateY(16px)}
+  60%{opacity:1;transform:scale(1.012) translateY(-2px)}
+  100%{opacity:1;transform:none}
+}
+#ctxMenu,.toast div{
+  -webkit-backdrop-filter:blur(24px) saturate(1.4);
+  backdrop-filter:blur(24px) saturate(1.4);
+  border-color:color-mix(in srgb,var(--accent) 14%,var(--line));
+}
+.toast div{animation:proToastIn .35s cubic-bezier(.16,1,.3,1)}
+@keyframes proToastIn{from{opacity:0;transform:translateX(26px)}to{opacity:1;transform:none}}
+
+/* ── Richer view transitions ─────────────────────────────────── */
+@keyframes viewIn{
+  from{opacity:0;transform:translateY(14px) scale(.985);filter:blur(6px)}
+  to{opacity:1;transform:none;filter:none}
+}
+
+/* ── Inputs: soft focus rings ────────────────────────────────── */
+input,textarea,select{transition:border-color .2s ease,box-shadow .2s ease}
+input:focus,textarea:focus,select:focus{
+  border-color:color-mix(in srgb,var(--accent) 55%,transparent);
+  box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 16%,transparent);
+}
+:focus-visible{outline:2px solid color-mix(in srgb,var(--accent) 60%,transparent);outline-offset:2px}
+
+/* ── Finishing touches ───────────────────────────────────────── */
+::selection{background:color-mix(in srgb,var(--accent) 35%,transparent)}
+::-webkit-scrollbar{width:9px;height:9px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{
+  background:color-mix(in srgb,var(--accent) 32%,transparent);
+  border-radius:99px;border:2px solid transparent;background-clip:padding-box;
+}
+::-webkit-scrollbar-thumb:hover{background:color-mix(in srgb,var(--accent) 52%,transparent);background-clip:padding-box}
+
+/* ── Respect reduced motion (system + in-app toggle) ─────────── */
+@media (prefers-reduced-motion:reduce){
+  body::after{animation:none}
+  .progress span::after,.fill::after,.btn.primary::after{animation:none;display:none}
+}
+body.reduce-motion::after{animation:none}
+body.reduce-motion .progress span::after,
+body.reduce-motion .fill::after,
+body.reduce-motion .btn.primary::after{animation:none;display:none}
+
+/* ═══ v9.1 PRO PACK ═══════════════════════════════════════════ */
+
+/* ── Greeting bar (dashboard) ───────────────────────────────── */
+#greetBar{
+  display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;
+  border:1px solid color-mix(in srgb,var(--accent) 18%,var(--line));
+  border-radius:var(--r);padding:14px 18px;margin-bottom:12px;
+  background:linear-gradient(135deg,color-mix(in srgb,var(--accent) 13%,transparent),color-mix(in srgb,var(--accent2) 6%,transparent)),var(--panel);
+  -webkit-backdrop-filter:blur(22px) saturate(1.45);backdrop-filter:blur(22px) saturate(1.45);
+  box-shadow:var(--shadow),inset 0 1px 0 rgba(255,255,255,.09);
+  animation:viewIn .4s cubic-bezier(.16,1,.3,1);
+}
+#greetMsg{font-size:1.15rem;font-weight:950;letter-spacing:-.04em;
+  background:linear-gradient(135deg,var(--ink) 30%,color-mix(in srgb,var(--accent) 75%,var(--ink)));
+  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+#greetDate{margin-top:2px}
+.greet-right{text-align:right;min-width:150px}
+#greetClock{font-size:1.5rem;font-weight:950;letter-spacing:.02em;font-variant-numeric:tabular-nums;color:var(--accent);line-height:1}
+.greet-meter{height:5px;border-radius:99px;background:rgba(255,255,255,.1);overflow:hidden;margin:7px 0 3px}
+.greet-meter span{display:block;height:100%;width:0;border-radius:99px;
+  background:linear-gradient(90deg,var(--accent),var(--accent2));transition:width 1s ease}
+body.light .greet-meter,body.pastel .greet-meter,body.melliea .greet-meter{background:rgba(0,0,0,.08)}
+
+/* ── 🔥 Streak chip ─────────────────────────────────────────── */
+#streakChip{
+  display:none;align-items:center;gap:5px;margin-left:10px;vertical-align:middle;
+  font-size:.66rem;font-weight:900;letter-spacing:.04em;color:var(--accent);
+  border:1px solid color-mix(in srgb,var(--accent) 40%,transparent);
+  background:color-mix(in srgb,var(--accent) 12%,transparent);
+  border-radius:999px;padding:4px 10px;
+  box-shadow:0 0 14px var(--pro-glow);
+  animation:streakPop .45s cubic-bezier(.34,1.56,.64,1);
+}
+#streakChip.on{display:inline-flex}
+@keyframes streakPop{from{opacity:0;transform:scale(.6)}to{opacity:1;transform:none}}
+
+/* ── 3D tilt KPI cards ──────────────────────────────────────── */
+@media (pointer:fine){
+  .card.kpi{transform-style:preserve-3d;will-change:transform;position:relative;overflow:hidden}
+  .card.kpi.tilting{transition:none}
+  .card.kpi::before{
+    content:"";position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .25s;
+    background:radial-gradient(220px circle at var(--mx,50%) var(--my,50%),rgba(255,255,255,.14),transparent 65%);
+  }
+  .card.kpi:hover::before{opacity:1}
+}
+
+/* ── Button ripple ──────────────────────────────────────────── */
+.btn,.icon,.template{position:relative;overflow:hidden}
+.pro-ripple{
+  position:absolute;border-radius:50%;pointer-events:none;
+  background:color-mix(in srgb,var(--accent) 45%,rgba(255,255,255,.35));
+  transform:scale(0);animation:proRipple .55s ease-out forwards;
+}
+@keyframes proRipple{to{transform:scale(2.6);opacity:0}}
+
+/* ── Shortcuts help modal ───────────────────────────────────── */
+.sc-grid{display:grid;grid-template-columns:auto 1fr;gap:8px 16px;align-items:center;margin-top:6px}
+kbd.sc-key{
+  display:inline-block;min-width:26px;text-align:center;padding:4px 8px;
+  font:700 .72rem/1 var(--font);color:var(--ink);
+  border:1px solid var(--line);border-bottom-width:2px;border-radius:7px;
+  background:var(--soft2);box-shadow:inset 0 1px 0 rgba(255,255,255,.08);
+}
+
+/* ── Reduced motion: switch off v9.1 effects ────────────────── */
+@media (prefers-reduced-motion:reduce){
+  .pro-ripple{display:none}.card.kpi{transform:none!important}
+}
+body.reduce-motion .pro-ripple{display:none}
+body.reduce-motion .card.kpi{transform:none!important}
+</style>
+
 </head>
 <body>
 
@@ -1007,6 +1257,17 @@ body.density-ultra .card{padding:calc((13px - var(--compact)*3px)*.66)}
   <!-- DASHBOARD -->
   <section id="dashboard" class="view active">
     <div id="weekStripWrap"></div>
+    <div id="greetBar">
+      <div class="greet-left">
+        <div id="greetMsg">Hello</div>
+        <div id="greetDate" class="small"></div>
+      </div>
+      <div class="greet-right">
+        <div id="greetClock">--:--</div>
+        <div class="greet-meter"><span id="dayMeter"></span></div>
+        <div id="dayMeterLbl" class="small"></div>
+      </div>
+    </div>
     <div class="grid auto stagger">
       <div class="card kpi"><div class="label">Open To Do</div><div class="num" id="kOpen">0</div><div class="sub">Active items</div></div>
       <div class="card kpi"><div class="label">Overdue</div><div class="num" id="kOverdue">0</div><div class="sub">Needs attention</div></div>
@@ -3492,16 +3753,9 @@ function closeDedication(){
 function updateDedicationCountdown(){
   const el = document.getElementById('dedicationCountdown');
   if(!el) return;
-  // Anniversary: adjust date below when known
-  const ANNIVERSARY = '2024-06-14'; // ← update this
-  const BIRTHDAY = '1995-09-15';    // ← update this
-  const today2 = new Date(); today2.setHours(0,0,0,0);
-  const ann = new Date(ANNIVERSARY); ann.setFullYear(today2.getFullYear());
-  if(ann < today2) ann.setFullYear(today2.getFullYear()+1);
-  const bday = new Date(BIRTHDAY); bday.setFullYear(today2.getFullYear());
-  if(bday < today2) bday.setFullYear(today2.getFullYear()+1);
-  const daysToAnn = Math.ceil((ann-today2)/86400000);
-  const daysToBday = Math.ceil((bday-today2)/86400000);
+  // Dates come from SPECIAL_DATES (single place to edit, near end of script)
+  const daysToAnn = daysUntilMMDD(SPECIAL_DATES.anniversary.m, SPECIAL_DATES.anniversary.d);
+  const daysToBday = daysUntilMMDD(SPECIAL_DATES.birthday.m, SPECIAL_DATES.birthday.d);
   el.innerHTML = `
     <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
       <div class="melliea-countdown">
@@ -3517,8 +3771,8 @@ function updateDedicationCountdown(){
 
 // ── v8.8: Today Is Special Banner ────────────────────────────────────────────
 function checkSpecialDay(){
-  const ANNIVERSARY_DATE = '06-14'; // MM-DD ← update
-  const BIRTHDAY_DATE = '09-15';    // MM-DD ← update
+  const ANNIVERSARY_DATE = String(SPECIAL_DATES.anniversary.m).padStart(2,'0') + '-' + String(SPECIAL_DATES.anniversary.d).padStart(2,'0');
+  const BIRTHDAY_DATE = String(SPECIAL_DATES.birthday.m).padStart(2,'0') + '-' + String(SPECIAL_DATES.birthday.d).padStart(2,'0');
   const today3 = new Date();
   const mmdd = String(today3.getMonth()+1).padStart(2,'0') + '-' + String(today3.getDate()).padStart(2,'0');
   const banner = document.getElementById('specialBanner');
@@ -3545,7 +3799,175 @@ document.addEventListener('DOMContentLoaded', ()=>{
 // Hook into applySettings to apply melliea theme
 const _origApplySettings = typeof applySettings === 'function' ? applySettings : null;
 
+// ── v9.0: Special-date countdowns (single place to edit dates) ───────────────
+const SPECIAL_DATES = {
+  anniversary: { m: 9, d: 28 },  // ← September 28
+  birthday:    { m: 9, d: 15 }   // ← September 15 (update if needed)
+};
+// Timezone-safe: builds dates from local components with time zeroed,
+// so the day count is exact everywhere. Returns 0 on the day itself.
+function daysUntilMMDD(m, d){
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  let target = new Date(now.getFullYear(), m - 1, d);
+  if(target < today) target = new Date(now.getFullYear() + 1, m - 1, d);
+  return Math.round((target - today) / 86400000);
+}
+function updateSpecialCountdowns(){
+  const a = daysUntilMMDD(SPECIAL_DATES.anniversary.m, SPECIAL_DATES.anniversary.d);
+  const b = daysUntilMMDD(SPECIAL_DATES.birthday.m, SPECIAL_DATES.birthday.d);
+  const set = (numId, subId, days, emoji, todayMsg) => {
+    const n = document.getElementById(numId), s = document.getElementById(subId);
+    if(!n || !s) return;
+    if(days === 0){ n.textContent = emoji; s.textContent = todayMsg; }
+    else { n.textContent = days; s.textContent = days === 1 ? 'day to go' : 'days to go'; }
+  };
+  set('kAnnDays','kAnnSub', a, '🎉', 'Happy Anniversary!');
+  set('kBdayDays','kBdaySub', b, '🎂', 'Happy Birthday!');
+}
+document.addEventListener('DOMContentLoaded', () => {
+  updateSpecialCountdowns();
+  setInterval(updateSpecialCountdowns, 60 * 60 * 1000); // refresh hourly
+});
+
 // (dedication accessible via sidebar button)
+
+/* ═══ v9.1 PRO PACK — self-contained, append-only ══════════════ */
+
+// ── Live greeting bar + day progress ─────────────────────────────
+function updateGreetBar(){
+  const msg=document.getElementById('greetMsg'),dt=document.getElementById('greetDate'),
+        clk=document.getElementById('greetClock'),m=document.getElementById('dayMeter'),
+        ml=document.getElementById('dayMeterLbl');
+  if(!msg)return;
+  const now=new Date(),h=now.getHours();
+  const word=h<5?'Burning the midnight oil':h<12?'Good morning':h<17?'Good afternoon':h<21?'Good evening':'Winding down';
+  const who=(typeof currentUser!=='undefined'&&currentUser)?', '+currentUser:'';
+  msg.textContent=word+who+' 👋';
+  dt.textContent=now.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
+  clk.textContent=now.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});
+  const pct=Math.round(((now-new Date(now.getFullYear(),now.getMonth(),now.getDate()))/86400000)*100);
+  if(m)m.style.width=pct+'%';
+  if(ml)ml.textContent=pct+'% of the day';
+}
+
+// ── 🔥 Productivity streak (consecutive days with a completed task)
+function _streakKey(){return 'lt_streak_'+((typeof currentUser!=='undefined'&&currentUser)||'guest')}
+function _loadStreak(){try{return JSON.parse(localStorage.getItem(_streakKey()))||{last:'',count:0}}catch(e){return{last:'',count:0}}}
+function bumpStreak(){
+  const s=_loadStreak(),t=today();
+  if(s.last===t)return;
+  const y=new Date();y.setDate(y.getDate()-1);
+  const yest=y.getFullYear()+'-'+String(y.getMonth()+1).padStart(2,'0')+'-'+String(y.getDate()).padStart(2,'0');
+  s.count=(s.last===yest)?s.count+1:1;s.last=t;
+  localStorage.setItem(_streakKey(),JSON.stringify(s));
+}
+function updateStreakChip(){
+  let chip=document.getElementById('streakChip');
+  if(!chip){
+    const titleBox=document.querySelector('.title');
+    if(!titleBox)return;
+    chip=document.createElement('span');chip.id='streakChip';
+    titleBox.querySelector('h2')?.after(chip);
+  }
+  const s=_loadStreak(),t=today();
+  const y=new Date();y.setDate(y.getDate()-1);
+  const yest=y.getFullYear()+'-'+String(y.getMonth()+1).padStart(2,'0')+'-'+String(y.getDate()).padStart(2,'0');
+  const live=(s.last===t||s.last===yest)?s.count:0;
+  chip.textContent='🔥 '+live+' day streak';
+  chip.classList.toggle('on',live>0);
+}
+// Wrap toggleDone: stamp completions + feed the streak (original logic untouched)
+const _proOrigToggleDone=toggleDone;
+toggleDone=function(id,evt){
+  const t=data.tasks.find(x=>x.id===id);
+  const wasDone=t&&ensure(t).status==='done';
+  _proOrigToggleDone(id,evt);
+  if(t&&!wasDone&&t.status==='done'){t.completedAt=today();bumpStreak();save();}
+  updateStreakChip();
+};
+
+// ── Keyboard shortcuts: 1–9 views, N quick add, ? help ──────────
+const PRO_VIEW_KEYS={'1':'dashboard','2':'focus','3':'tasks','4':'templates','5':'insights','6':'calendar','7':'notes','8':'finance','9':'settings'};
+function _proTyping(){const a=document.activeElement;return a&&(a.tagName==='INPUT'||a.tagName==='TEXTAREA'||a.tagName==='SELECT'||a.isContentEditable)}
+function openShortcutHelp(){
+  let m=document.getElementById('shortcutModal');
+  if(!m){
+    m=document.createElement('div');m.id='shortcutModal';m.className='modal';
+    m.innerHTML=`<div class="modal-card" style="width:min(420px,100%)">
+      <div class="modal-head"><h3 style="margin:0">⌨️ Keyboard Shortcuts</h3>
+      <button class="icon" onclick="document.getElementById('shortcutModal').classList.remove('show')">✕</button></div>
+      <div class="sc-grid">
+        <span><kbd class="sc-key">1</kbd>–<kbd class="sc-key">9</kbd></span><span class="small">Switch pages (Dashboard … Settings)</span>
+        <kbd class="sc-key">N</kbd><span class="small">New task — jump to quick add</span>
+        <span><kbd class="sc-key">Ctrl</kbd> <kbd class="sc-key">K</kbd></span><span class="small">Global search</span>
+        <kbd class="sc-key">Esc</kbd><span class="small">Close any popup</span>
+        <kbd class="sc-key">?</kbd><span class="small">Show this help</span>
+      </div></div>`;
+    m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('show')});
+    document.body.appendChild(m);
+  }
+  m.classList.add('show');
+}
+document.addEventListener('keydown',e=>{
+  if(_proTyping()||e.ctrlKey||e.metaKey||e.altKey)return;
+  if(document.querySelector('.login-screen.show'))return;
+  if(e.key==='?'){e.preventDefault();openShortcutHelp();return;}
+  if(document.querySelector('.modal.show'))return;
+  if(PRO_VIEW_KEYS[e.key]&&typeof show==='function'){e.preventDefault();show(PRO_VIEW_KEYS[e.key]);return;}
+  if(e.key.toLowerCase()==='n'){
+    e.preventDefault();
+    if(typeof show==='function')show('dashboard');
+    const qi=document.getElementById('quickInput')||window.quickInput;
+    if(qi){qi.focus();qi.scrollIntoView({block:'center',behavior:'smooth'});}
+  }
+});
+
+// ── 3D tilt on KPI cards (desktop pointer only) ──────────────────
+(function(){
+  if(!matchMedia('(pointer:fine)').matches)return;
+  let raf=null;
+  document.addEventListener('pointermove',e=>{
+    const card=e.target.closest&&e.target.closest('.card.kpi');
+    if(!card)return;
+    if(document.body.classList.contains('reduce-motion'))return;
+    if(matchMedia('(prefers-reduced-motion:reduce)').matches)return;
+    if(raf)cancelAnimationFrame(raf);
+    raf=requestAnimationFrame(()=>{
+      const r=card.getBoundingClientRect(),
+            px=(e.clientX-r.left)/r.width,py=(e.clientY-r.top)/r.height;
+      card.classList.add('tilting');
+      card.style.transform=`perspective(700px) rotateX(${(0.5-py)*7}deg) rotateY(${(px-0.5)*9}deg) translateY(-2px)`;
+      card.style.setProperty('--mx',(px*100)+'%');
+      card.style.setProperty('--my',(py*100)+'%');
+    });
+  });
+  document.addEventListener('pointerout',e=>{
+    const card=e.target.closest&&e.target.closest('.card.kpi');
+    if(card&&!card.contains(e.relatedTarget)){
+      card.classList.remove('tilting');card.style.transform='';
+    }
+  });
+})();
+
+// ── Material ripple on buttons ───────────────────────────────────
+document.addEventListener('pointerdown',e=>{
+  if(matchMedia('(prefers-reduced-motion:reduce)').matches)return;
+  if(document.body.classList.contains('reduce-motion'))return;
+  const el=e.target.closest&&e.target.closest('.btn,.icon,.template');
+  if(!el)return;
+  const r=el.getBoundingClientRect(),size=Math.max(r.width,r.height);
+  const rip=document.createElement('span');rip.className='pro-ripple';
+  rip.style.cssText=`width:${size}px;height:${size}px;left:${e.clientX-r.left-size/2}px;top:${e.clientY-r.top-size/2}px`;
+  el.appendChild(rip);
+  rip.addEventListener('animationend',()=>rip.remove());
+});
+
+// ── Boot ─────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded',()=>{
+  updateGreetBar();setInterval(updateGreetBar,1000);
+  setTimeout(updateStreakChip,800);
+});
 
 </script>
 <script src="sync.js"></script>
